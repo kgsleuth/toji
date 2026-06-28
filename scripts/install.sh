@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | bash
 #
 # Pin a version:
-#   curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | TOJI_VERSION=v0.1.0 bash
+#   curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | TOJI_VERSION=v0.1.1 bash
 #
 # Environment:
 #   TOJI_REPO             GitHub repo (default: kgsleuth/toji)
