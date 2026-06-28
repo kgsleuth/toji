@@ -94,8 +94,27 @@ fetch_release_json() {
   while IFS= read -r arg; do
     [[ -n "$arg" ]] && args+=("$arg")
   done < <(curl_auth_args)
-  # Capture both body and HTTP status
-  curl -fsSL -w "\n%{http_code}" "${args[@]}" "$url"
+
+  # Retry a few times because the release may still be publishing
+  local max_attempts=6
+  local attempt=1
+  while [ $attempt -le $max_attempts ]; do
+    local output
+    output=$(curl -fsSL -w "\n%{http_code}" "${args[@]}" "$url" 2>/dev/null || true)
+    local body="${output%$'\n'*}"
+    local code="${output##*$'\n'}"
+    if [ "$code" = "200" ]; then
+      printf '%s\n' "$body"
+      return 0
+    fi
+    if [ $attempt -lt $max_attempts ]; then
+      printf 'toji install: waiting for release to be published (attempt %d/%d)...\n' $attempt $max_attempts >&2
+      sleep $((attempt * 5))
+    fi
+    attempt=$((attempt + 1))
+  done
+  # Return the last output so caller can see the status
+  printf '%s\n' "$output"
 }
 
 resolve_asset_id() {
@@ -111,12 +130,10 @@ resolve_asset_id() {
     if [[ "$status" == "404" && -z "${TOJI_GITHUB_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
       die "Could not find release \"${version}\" for ${TOJI_REPO}.
 
-This usually means no releases have been published yet (public repo).
+No release published yet. The GitHub Actions workflow may still be running
+or waiting for a runner (see https://github.com/${TOJI_REPO}/actions ).
 
-As the maintainer, push a version tag:
-  git tag v0.1.1 && git push origin v0.1.1
-
-Then wait for the GitHub Actions 'Release' workflow to finish.
+As maintainer: make sure the 'Release' workflow completes successfully for the tag.
 
 See https://github.com/${TOJI_REPO}/releases"
     fi
