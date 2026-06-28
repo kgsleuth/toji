@@ -11,7 +11,7 @@
 #   TOJI_REPO             GitHub repo (default: kgsleuth/toji)
 #   TOJI_VERSION          Release tag or "latest" (default: latest)
 #   TOJI_INSTALL_DIR      Install directory (default: ~/.local/bin)
-#   TOJI_GITHUB_TOKEN     PAT (or use GITHUB_TOKEN / GH_TOKEN). Preferred: gh auth login
+#   TOJI_GITHUB_TOKEN     PAT with repo scope (optional if `gh auth login` is active)
 
 set -euo pipefail
 
@@ -26,13 +26,21 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
-curl_auth_args() {
+github_auth_token() {
   if [[ -n "${TOJI_GITHUB_TOKEN:-}" ]]; then
-    printf '%s\n' "-H" "Authorization: Bearer ${TOJI_GITHUB_TOKEN}"
+    printf '%s' "${TOJI_GITHUB_TOKEN}"
   elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    printf '%s\n' "-H" "Authorization: Bearer ${GITHUB_TOKEN}"
-  elif [[ -n "${GH_TOKEN:-}" ]]; then
-    printf '%s\n' "-H" "Authorization: Bearer ${GH_TOKEN}"
+    printf '%s' "${GITHUB_TOKEN}"
+  elif command -v gh >/dev/null 2>&1; then
+    gh auth token 2>/dev/null || true
+  fi
+}
+
+curl_auth_args() {
+  local token
+  token="$(github_auth_token)"
+  if [[ -n "$token" ]]; then
+    printf '%s\n' "-H" "Authorization: Bearer ${token}"
   fi
 }
 
@@ -94,54 +102,20 @@ fetch_release_json() {
   while IFS= read -r arg; do
     [[ -n "$arg" ]] && args+=("$arg")
   done < <(curl_auth_args)
-
-  # Retry a few times because the release may still be publishing
-  local max_attempts=6
-  local attempt=1
-  while [ $attempt -le $max_attempts ]; do
-    local output
-    output=$(curl --connect-timeout 10 --max-time 30 -fsSL -w "\n%{http_code}" "${args[@]}" "$url" 2>/dev/null || true)
-    local body="${output%$'\n'*}"
-    local code="${output##*$'\n'}"
-    if [ "$code" = "200" ]; then
-      printf '%s\n' "$body"
-      return 0
-    fi
-    if [ $attempt -lt $max_attempts ]; then
-      printf 'toji install: waiting for release to be published (attempt %d/%d)...\n' $attempt $max_attempts >&2
-      sleep $((attempt * 5))
-    fi
-    attempt=$((attempt + 1))
-  done
-  # Return the last output so caller can see the status
-  printf '%s\n' "$output"
+  curl -fsSL "${args[@]}" "$url"
 }
 
 resolve_asset_id() {
   local version="$1"
   local asset_name="$2"
   local json tag available id
-  local raw status
-  raw="$(fetch_release_json "$version" 2>/dev/null || true)"
-  json="${raw%$'\n'*}"
-  status="${raw##*$'\n'}"
-
-  if [[ "$status" != "200" || -z "$json" ]]; then
-    if [[ "$status" == "404" && -z "${TOJI_GITHUB_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
+  if ! json="$(fetch_release_json "$version" 2>/dev/null)"; then
+    if [[ -z "$(github_auth_token)" ]]; then
       die "Could not find release \"${version}\" for ${TOJI_REPO}.
 
-No release published yet. The GitHub Actions workflow may still be running
-or waiting for a runner (see https://github.com/${TOJI_REPO}/actions ).
-
-As maintainer: make sure the 'Release' workflow completes successfully for the tag.
-
-See https://github.com/${TOJI_REPO}/releases"
-    fi
-    if [[ -z "${TOJI_GITHUB_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
-      die "Could not find release \"${version}\" for ${TOJI_REPO}.
-
-If https://github.com/${TOJI_REPO} is private, run 'gh auth login' (recommended)
-or set TOJI_GITHUB_TOKEN (PAT with repo scope).
+If https://github.com/${TOJI_REPO} is private, run:
+  gh auth login
+or set TOJI_GITHUB_TOKEN (PAT with repo read access).
 
 See https://github.com/${TOJI_REPO}/releases"
     fi
@@ -162,7 +136,7 @@ tag = data.get("tag_name", "?")
 assets = data.get("assets") or []
 for a in assets:
     if a.get("name") == name:
-        print(a.get("browser_download_url", ""))
+        print(a["id"])
         sys.exit(0)
 names = ", ".join(sorted(a.get("name", "?") for a in assets))
 print(f"MISSING:{tag}:{names}", file=sys.stderr)
@@ -186,14 +160,14 @@ fetch_asset() {
   local dest="$2"
   local asset_label="${3:-release asset}"
   local url args=()
-  url="$asset_id"
+  url="https://api.github.com/repos/${TOJI_REPO}/releases/assets/${asset_id}"
   while IFS= read -r arg; do
     [[ -n "$arg" ]] && args+=("$arg")
   done < <(curl_auth_args)
-  if ! curl --connect-timeout 10 --max-time 120 --retry 3 --retry-delay 2 -fL "${args[@]}" --progress-bar "$url" -o "$dest"; then
+  if ! curl -fsSL "${args[@]}" -H "Accept: application/octet-stream" "$url" -o "$dest" 2>/dev/null; then
     die "Failed to download ${asset_label} from ${TOJI_REPO}.
 
-If the repo is private, ensure TOJI_GITHUB_TOKEN is set (or run gh auth login before piping).
+If the repo is private, run \`gh auth login\` or set TOJI_GITHUB_TOKEN.
 
 See https://github.com/${TOJI_REPO}/releases"
   fi
@@ -209,14 +183,14 @@ path_contains_dir() {
 
 update_state_path() {
   local base="${XDG_STATE_HOME:-${HOME}/.local/state}"
-  printf '%s/toji/toji.json' "$base"
+  printf '%s/toji/update.json' "$base"
 }
 
 seed_update_state() {
   local dest="$1"
   local state_path version_label
   state_path="$(update_state_path)"
-  version_label="$("$dest" --version 2>/dev/null || echo "toji unknown")"
+  version_label="$("$dest" --version)"
   version_label="${version_label#toji }"
   version_label="${version_label%% *}"
   mkdir -p "$(dirname "$state_path")"
@@ -240,14 +214,12 @@ main() {
   info "version ${version}"
   info "install ${dest}"
 
-  info "resolving release asset..."
   asset_id="$(resolve_asset_id "$version" "$asset")"
 
   mkdir -p "$TOJI_INSTALL_DIR"
   tmp="$(mktemp "${TMPDIR:-/tmp}/toji-install.XXXXXX")"
   trap 'rm -f "$tmp"' EXIT
 
-  info "downloading binary..."
   fetch_asset "$asset_id" "$tmp" "$asset"
 
   chmod +x "$tmp"
@@ -265,7 +237,6 @@ main() {
 
   if path_contains_dir "$TOJI_INSTALL_DIR"; then
     info "run: toji --version"
-    info "auth: toji auth"
   else
     info "add ${TOJI_INSTALL_DIR} to PATH, then run: toji --version"
     cat <<EOF
@@ -278,7 +249,6 @@ Then:
 
   toji --version
   toji auth
-  toji install curtain
 EOF
   fi
 }
