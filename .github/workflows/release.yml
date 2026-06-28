@@ -11,18 +11,19 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - runner: ubuntu-latest
             asset: toji-linux-x86_64
-            runner: ubuntu-latest
-          - os: macos-intel
+          - runner: ubuntu-22.04-arm
+            asset: toji-linux-aarch64
+          - runner: macos-13
             asset: toji-macos-x86_64
-            runner: macos-13
-          - os: macos-arm
+          - runner: macos-latest
             asset: toji-macos-aarch64
-            runner: macos-latest
     runs-on: ${{ matrix.runner }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -35,42 +36,54 @@ jobs:
       - name: Setup sbt
         uses: sbt/setup-sbt@v1
 
-      - name: Install native deps (Linux)
+      - name: Install native dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -y
           sudo apt-get install -y clang llvm libgc-dev libz-dev
 
-      - name: Install native deps (macOS)
+      - name: Install native dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
           brew update
           brew install llvm || true
 
-      - name: Build native binary (release fast)
+      - name: Build native binary (release-fast)
         working-directory: native
         run: sbt nativeLinkReleaseFast
 
-      - name: Rename + chmod binary
-        working-directory: native
+      - name: Stage release binary
         run: |
-          BIN="target/scala-3.4.0/toji"
-          chmod +x "$BIN"
-          cp "$BIN" "$BIN-${{ matrix.asset }}"
-          echo "asset=${{ matrix.asset }}" >> $GITHUB_ENV
+          mkdir -p dist
+          cp native/target/scala-3.4.0/toji dist/${{ matrix.asset }}
+          chmod +x dist/${{ matrix.asset }}
+          ls -lh dist/
 
-      - name: Upload Release Asset
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release with assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          files: native/target/scala-3.4.0/toji-${{ matrix.asset }}
+          files: dist/*
           draft: false
           prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Optional: linux aarch64 (may be slow or require special setup)
-  # build-linux-arm:
-  #   runs-on: ubuntu-22.04-arm
-  #   ...

@@ -21,19 +21,31 @@ He wields an arsenal of **cursed tools** pulled from hidden inventory. He doesn'
 
 This project is the same: a mundane (public) binary that lets you summon powerful private tools using only the permissions you already have on GitHub.
 
+## Install
+
+```bash
+# Latest release (recommended)
+curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | bash
+
+# Pin a specific version
+curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | TOJI_VERSION=v0.1.0 bash
+```
+
+After install:
+
+```bash
+toji --version
+toji auth          # verify it sees your gh session
+toji list
+```
+
 ## Quick Start
 
 ```bash
-# One-liner install (latest)
-curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | bash
-
-# Then
-toji --version
-toji auth
-toji list
-toji search cli
 toji install curtain
+toji install kgsleuth/shikigami
 toji update shikigami
+toji search cli
 ```
 
 ## Commands
