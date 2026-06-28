@@ -47,7 +47,7 @@ object Auth:
       case GhCli =>
         Try(Process(Seq("gh", "auth", "token")).!!).toOption.map(_.trim).filter(_.nonEmpty)
       case Token(t) => Some(t)
-      case None => None
+      case Auth.None => scala.None
 
   /** Returns curl -H args for Authorization if we have a token (gh cli does not need it) */
   def curlAuthArgs: Seq[String] =
