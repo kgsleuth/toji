@@ -138,3 +138,18 @@ All the actual power lives in your private repos.
 - Written in Scala 3 Native so it's a single fast static binary with no runtime.
 
 **Raise the tool. Cut the problem.**
+
+## Releasing a new version
+
+1. Make changes on `main`.
+2. (Recommended) Bump `version` in `native/build.sbt` and `native/src/main/scala/io/toji/Main.scala` (e.g. 0.1.3), commit.
+3. `git tag -a v0.1.3 -m "v0.1.3"`
+4. `git push origin main && git push origin v0.1.3`
+
+The Release workflow will:
+- Force the binary + embedded `--version` to match the tag (0.1.3).
+- Build all 4 platform binaries.
+- Create the GitHub Release with assets + `install.sh`.
+- Verify the assets.
+
+Always use a **new** unique version tag (never force-push an old tag). This forces a fresh versioned release every time.
