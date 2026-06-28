@@ -113,9 +113,10 @@ resolve_asset_id() {
     if [[ -z "$(github_auth_token)" ]]; then
       die "Could not find release \"${version}\" for ${TOJI_REPO}.
 
-If https://github.com/${TOJI_REPO} is private, run:
-  gh auth login
-or set TOJI_GITHUB_TOKEN (PAT with repo read access).
+The release may not exist yet or you may not have permission.
+Check https://github.com/${TOJI_REPO}/releases and the Actions tab.
+
+If the repo is private: run 'gh auth login' or set TOJI_GITHUB_TOKEN (PAT with repo read access).
 
 See https://github.com/${TOJI_REPO}/releases"
     fi
@@ -167,7 +168,9 @@ fetch_asset() {
   if ! curl -fsSL "${args[@]}" -H "Accept: application/octet-stream" "$url" -o "$dest" 2>/dev/null; then
     die "Failed to download ${asset_label} from ${TOJI_REPO}.
 
-If the repo is private, run \`gh auth login\` or set TOJI_GITHUB_TOKEN.
+Check the release and assets at https://github.com/${TOJI_REPO}/releases
+
+If the repo is private: run \`gh auth login\` or set TOJI_GITHUB_TOKEN.
 
 See https://github.com/${TOJI_REPO}/releases"
   fi
