@@ -17,13 +17,16 @@ object ToolRegistry:
   ):
     def base: String = if binaryBase.nonEmpty then binaryBase else name
 
-  // NOTE: Add your tools. These are examples; real ones may be in private repos.
+  // NOTE: Add your tools here for friendly names, search, aliases, etc.
+  // Bare names (without /) are automatically prefixed with toji's own owner at runtime
+  // (see defaultOwner below). You can always use full owner/repo.
   // Users with access can `toji install owner/repo` for anything not listed.
   val tools: List[Tool] = List(
     Tool("toji", "kgsleuth/toji", "The gap-filling cursed tool installer (this binary)."),
     Tool("curtain", "kgsleuth/curtain", "Security curtains: pre-commit + GitHub Actions for secret scanning & private-by-default."),
     Tool("shikigami", "kgsleuth/shikigami", "Observe industry, spec projects, RAG + suggestions for adapting capabilities."),
     Tool("sleuthctl", "kgsleuth/sleuthctl", "Microsoft Sentinel / Defender XDR incident response knowledge and tooling."),
+    Tool("kenjaku", "kgsleuth/kenjaku", "Local planning CLI for to-dos/ queues, plan shards, dependency gating, and live MASTER-TODO.md."),
     // Example of a private tool you might publish:
     // Tool("grok", "kgsleuth/grok", "Internal Grok CLI.", aliases = List("g")),
   )
@@ -53,8 +56,13 @@ object ToolRegistry:
         t.aliases.exists(_.toLowerCase.contains(q))
       }
 
+  private val tojiRepo = findByNameOrAlias("toji").map(_.repo).getOrElse("kgsleuth/toji")
+  val defaultOwner: String = tojiRepo.split("/")(0)
+
   def defaultRepoFor(nameOrRepo: String): String =
-    findByNameOrAlias(nameOrRepo).map(_.repo).getOrElse(nameOrRepo)
+    findByNameOrAlias(nameOrRepo).map(_.repo).getOrElse {
+      if (nameOrRepo.contains("/")) nameOrRepo else s"$defaultOwner/$nameOrRepo"
+    }
 
   def baseFor(nameOrRepo: String): String =
     findByNameOrAlias(nameOrRepo).map(_.base).getOrElse {
