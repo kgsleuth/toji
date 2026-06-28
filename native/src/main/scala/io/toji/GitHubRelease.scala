@@ -36,8 +36,8 @@ See $seeUrl"""
     (release, asset)
 
   def download(repo: String, asset: Asset, dest: Path): Unit =
-    // Prefer browser_download_url (works with auth header for private repos, direct for public)
-    val url = asset.downloadUrl.getOrElse(s"https://api.github.com/repos/$repo/releases/assets/${asset.id}")
+    // Always use the assets API endpoint with auth header (works for private repos; public works too)
+    val url = s"https://api.github.com/repos/$repo/releases/assets/${asset.id}"
     val status = curlToFileAuthed(url, dest)
     if status != 200 then
       downloadFailed(repo, asset.name)
