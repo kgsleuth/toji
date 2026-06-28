@@ -28,7 +28,7 @@ This project is the same: a mundane (public) binary that lets you summon powerfu
 curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | bash
 
 # Pin a specific version
-curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | TOJI_VERSION=v0.1.1 bash
+curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | TOJI_VERSION=v0.1.2 bash
 ```
 
 After install:

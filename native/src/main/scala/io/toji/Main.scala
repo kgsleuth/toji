@@ -5,7 +5,7 @@ import scala.sys.process.*
 import scala.util.Try
 
 object Main:
-  val Version = "0.1.1 (Scala Native)"
+  val Version = "0.1.2 (Scala Native)"
 
   def main(args: Array[String]): Unit =
     val code =
