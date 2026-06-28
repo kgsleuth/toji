@@ -15,14 +15,14 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-24.04
-            asset_name: toji-linux-x86_64
+            artifact: toji-linux-x86_64
           - runner: ubuntu-24.04-arm
-            asset_name: toji-linux-aarch64
+            artifact: toji-linux-aarch64
           # Apple Silicon tracks latest; Intel pinned (no macos-intel-latest)
           - runner: macos-latest
-            asset_name: toji-macos-aarch64
+            artifact: toji-macos-aarch64
           - runner: macos-15-intel
-            asset_name: toji-macos-x86_64
+            artifact: toji-macos-x86_64
 
     runs-on: ${{ matrix.runner }}
 
@@ -48,14 +48,14 @@ jobs:
       - name: Package binary
         working-directory: native/target/scala-3.4.0
         run: |
-          cp toji ${{ matrix.asset_name }}
-          chmod +x ${{ matrix.asset_name }}
+          cp toji ${{ matrix.artifact }}
+          chmod +x ${{ matrix.artifact }}
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.asset_name }}
-          path: native/target/scala-3.4.0/${{ matrix.asset_name }}
+          name: ${{ matrix.artifact }}
+          path: native/target/scala-3.4.0/${{ matrix.artifact }}
           if-no-files-found: error
 
   release:
