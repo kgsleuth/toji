@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            artifact: toji-linux-x86_64
+          - runner: ubuntu-24.04-arm
+            artifact: toji-linux-aarch64
+          # Apple Silicon tracks latest; Intel pinned (no macos-intel-latest)
+          - runner: macos-latest
+            artifact: toji-macos-aarch64
+          - runner: macos-15-intel
+            artifact: toji-macos-x86_64
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: sbt
+
+      - uses: sbt/setup-sbt@v1
+
+      - name: Install libcurl (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libidn2-dev
+
+      - name: Test and link native binary
+        working-directory: native
+        run: sbt "test; nativeLink"
+
+      - name: Smoke test
+        working-directory: native
+        run: |
+          ./target/scala-3.4.0/toji --version
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: native/target/scala-3.4.0/toji
+          if-no-files-found: error
+
+  install-script:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate install script
+        run: bash scripts/test-install.sh
