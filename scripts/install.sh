@@ -190,7 +190,7 @@ fetch_asset() {
   while IFS= read -r arg; do
     [[ -n "$arg" ]] && args+=("$arg")
   done < <(curl_auth_args)
-  if ! curl -fsSL "${args[@]}" -H "Accept: application/octet-stream" "$url" -o "$dest" 2>/dev/null; then
+  if ! curl -fL "${args[@]}" -H "Accept: application/octet-stream" --progress-bar "$url" -o "$dest"; then
     die "Failed to download ${asset_label} from ${TOJI_REPO}.
 
 If the repo is private, ensure TOJI_GITHUB_TOKEN is set (or run gh auth login before piping).
