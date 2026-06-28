@@ -18,10 +18,10 @@ jobs:
             artifact: toji-linux-x86_64
           - runner: ubuntu-24.04-arm
             artifact: toji-linux-aarch64
-          # Apple Silicon tracks latest; Intel pinned (no macos-intel-latest)
+          # Apple Silicon uses macos-latest; Intel uses macos-intel-latest
           - runner: macos-latest
             artifact: toji-macos-aarch64
-          - runner: macos-15-intel
+          - runner: macos-intel-latest
             artifact: toji-macos-x86_64
 
     runs-on: ${{ matrix.runner }}
@@ -78,6 +78,8 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   verify:
     needs: release
