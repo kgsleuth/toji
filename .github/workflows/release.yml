@@ -52,7 +52,11 @@ jobs:
         working-directory: native
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          sed -i "s/0\.[0-9]\+\.[0-9]\+/$VERSION/g" src/main/scala/io/toji/Main.scala
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            perl -pi -e "s/0\.[0-9]+\.[0-9]+/$VERSION/g" src/main/scala/io/toji/Main.scala
+          else
+            sed -i "s/0\.[0-9]\+\.[0-9]\+/$VERSION/g" src/main/scala/io/toji/Main.scala
+          fi
           sbt "set version := \"$VERSION\"; test; nativeLink"
 
       - name: Package binary
