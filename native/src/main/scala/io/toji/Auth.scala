@@ -42,11 +42,16 @@ object Auth:
 
   def token: Option[String] = tokenFromEnv
 
+  def getToken: Option[String] =
+    current match
+      case GhCli =>
+        Try(Process(Seq("gh", "auth", "token")).!!).toOption.map(_.trim).filter(_.nonEmpty)
+      case Token(t) => Some(t)
+      case None => None
+
   /** Returns curl -H args for Authorization if we have a token (gh cli does not need it) */
   def curlAuthArgs: Seq[String] =
-    current match
-      case Token(t) => Seq("-H", s"Authorization: Bearer $t")
-      case _        => Nil
+    getToken.toSeq.flatMap(t => Seq("-H", s"Authorization: Bearer $t"))
 
   /** For gh commands: if GhCli, we can just call gh. If token, gh can take --with-token but we prefer env. */
   def describe: String =

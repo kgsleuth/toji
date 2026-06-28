@@ -36,26 +36,8 @@ See $seeUrl"""
     (release, asset)
 
   def download(repo: String, asset: Asset, dest: Path): Unit =
-    // Best path: use gh release download when gh cli is authed (works great for private)
-    if Auth.current == Auth.GhCli then
-      val success = Try {
-        // We need the tag. We can fetch it again or accept that callers know.
-        // Simpler: ask gh to download using the asset name pattern for the latest or tag? 
-        // Since we already resolved, use the API asset download path via gh (gh api handles auth).
-        // Fast path: gh release download <tag> ...
-        // But we don't always have tag at this level cleanly. Use the asset id API via gh which is authed.
-        val apiPath = s"repos/$repo/releases/assets/${asset.id}"
-        val code = Process(
-          Seq("gh", "api", apiPath, "-H", "Accept: application/octet-stream") ++
-            Seq("--output", dest.toString)
-        ).!(ProcessLogger(_ => (), _ => ()))
-        code == 0
-      }.getOrElse(false)
-      if success then return
-      // else fall to curl path (still has token? or will fail nicely)
-
-    // Use releases/assets/{id} with appropriate auth header (or gh session not needed for curl if we use gh above)
-    val url = s"https://api.github.com/repos/$repo/releases/assets/${asset.id}"
+    // Prefer browser_download_url (works with auth header for private repos, direct for public)
+    val url = asset.downloadUrl.getOrElse(s"https://api.github.com/repos/$repo/releases/assets/${asset.id}")
     val status = curlToFileAuthed(url, dest)
     if status != 200 then
       downloadFailed(repo, asset.name)
