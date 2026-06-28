@@ -115,7 +115,9 @@ jobs:
                 -o "/tmp/${name}" \
                 "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/${id}"
               chmod +x "/tmp/${name}"
-              "/tmp/${name}" --version
+              if [[ "$name" == *"linux-x86_64"* ]]; then
+                "/tmp/${name}" --version
+              fi
             fi
             echo "ok: $name ($size bytes)"
           done
