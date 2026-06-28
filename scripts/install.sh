@@ -113,7 +113,7 @@ resolve_asset_id() {
     if [[ -z "$(github_auth_token)" ]]; then
       die "Could not find release \"${version}\" for ${TOJI_REPO}.
 
-No release found for this version (public repo with no published release, or the workflow has not finished yet).
+No release published yet (the workflow may still be running or the tag has no release).
 
 If the repo is private: run 'gh auth login' or set TOJI_GITHUB_TOKEN (PAT with repo read access).
 
