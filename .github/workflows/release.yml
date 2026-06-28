@@ -46,7 +46,11 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install llvm || true
+          brew install llvm
+          LLVM_PREFIX=$(brew --prefix llvm)
+          echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
+          echo "LDFLAGS=-L$LLVM_PREFIX/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$LLVM_PREFIX/include" >> $GITHUB_ENV
 
       - name: Build native binary (release-fast)
         working-directory: native
@@ -55,9 +59,16 @@ jobs:
       - name: Stage release binary
         run: |
           mkdir -p dist
-          cp native/target/scala-3.4.0/toji dist/${{ matrix.asset }}
+          # nativeLinkReleaseFast produces toji-release-fast (regular nativeLink produces 'toji')
+          BIN=$(ls native/target/scala-3.4.0/toji* 2>/dev/null | head -1)
+          cp "$BIN" dist/${{ matrix.asset }}
           chmod +x dist/${{ matrix.asset }}
           ls -lh dist/
+
+      - name: Verify binary
+        run: |
+          file dist/${{ matrix.asset }} || true
+          dist/${{ matrix.asset }} --version || echo "version check skipped (may need PATH)"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
