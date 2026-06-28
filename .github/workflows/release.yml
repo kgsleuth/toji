@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: toji-linux-x86_64
+            runner: ubuntu-latest
+          - os: macos-intel
+            asset: toji-macos-x86_64
+            runner: macos-13
+          - os: macos-arm
+            asset: toji-macos-aarch64
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Install native deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang llvm libgc-dev libz-dev
+
+      - name: Install native deps (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install llvm || true
+
+      - name: Build native binary (release fast)
+        working-directory: native
+        run: sbt nativeLinkReleaseFast
+
+      - name: Rename + chmod binary
+        working-directory: native
+        run: |
+          BIN="target/scala-3.4.0/toji"
+          chmod +x "$BIN"
+          cp "$BIN" "$BIN-${{ matrix.asset }}"
+          echo "asset=${{ matrix.asset }}" >> $GITHUB_ENV
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: native/target/scala-3.4.0/toji-${{ matrix.asset }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Optional: linux aarch64 (may be slow or require special setup)
+  # build-linux-arm:
+  #   runs-on: ubuntu-22.04-arm
+  #   ...

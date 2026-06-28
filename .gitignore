@@ -1,0 +1,64 @@
+# sbt
+target/
+project/target/
+project/project/target/
+.bsp/
+.bloop/
+.metals/
+.vscode/
+
+# Scala / Scala Native build artifacts
+*.class
+*.tasty
+*.nir
+*.ll
+*.o
+*.a
+*.so
+*.dylib
+
+# IDE and editors
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Native binaries (dev builds and installed) - be specific so we don't
+# accidentally ignore source directories that contain "toji" etc.
+native/target/**/toji
+**/toji
+!native/src/main/scala/io/toji/
+!**/io/toji/
+
+native/target/**/curtain
+**/curtain
+!**/io/curtain/
+
+native/target/**/shikigami
+**/shikigami
+!**/io/shikigami/
+
+# Installed / PATH copies (these are fine to ignore everywhere)
+**/.local/bin/toji
+**/.local/bin/curtain
+**/.local/bin/shikigami
+
+# Runtime state (from the tool itself)
+**/.local/state/toji/
+
+# Environment / secrets (never commit)
+.env
+*.env
+**/*token*
+**/*secret*
+
+# Logs and temp
+*.log
+tmp/
+temp/
+*.tmp
