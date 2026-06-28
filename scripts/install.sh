@@ -100,7 +100,7 @@ fetch_release_json() {
   local attempt=1
   while [ $attempt -le $max_attempts ]; do
     local output
-    output=$(curl -fsSL -w "\n%{http_code}" "${args[@]}" "$url" 2>/dev/null || true)
+    output=$(curl --connect-timeout 10 --max-time 30 -fsSL -w "\n%{http_code}" "${args[@]}" "$url" 2>/dev/null || true)
     local body="${output%$'\n'*}"
     local code="${output##*$'\n'}"
     if [ "$code" = "200" ]; then
@@ -190,7 +190,7 @@ fetch_asset() {
   while IFS= read -r arg; do
     [[ -n "$arg" ]] && args+=("$arg")
   done < <(curl_auth_args)
-  if ! curl -fL "${args[@]}" -H "Accept: application/octet-stream" --progress-bar "$url" -o "$dest"; then
+  if ! curl --connect-timeout 10 --max-time 120 -fL "${args[@]}" -H "Accept: application/octet-stream" --progress-bar "$url" -o "$dest"; then
     die "Failed to download ${asset_label} from ${TOJI_REPO}.
 
 If the repo is private, ensure TOJI_GITHUB_TOKEN is set (or run gh auth login before piping).
