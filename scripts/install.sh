@@ -94,14 +94,32 @@ fetch_release_json() {
   while IFS= read -r arg; do
     [[ -n "$arg" ]] && args+=("$arg")
   done < <(curl_auth_args)
-  curl -fsSL "${args[@]}" "$url"
+  # Capture both body and HTTP status
+  curl -fsSL -w "\n%{http_code}" "${args[@]}" "$url"
 }
 
 resolve_asset_id() {
   local version="$1"
   local asset_name="$2"
   local json tag available id
-  if ! json="$(fetch_release_json "$version" 2>/dev/null)"; then
+  local raw status
+  raw="$(fetch_release_json "$version" 2>/dev/null || true)"
+  json="${raw%$'\n'*}"
+  status="${raw##*$'\n'}"
+
+  if [[ "$status" != "200" || -z "$json" ]]; then
+    if [[ "$status" == "404" && -z "${TOJI_GITHUB_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
+      die "Could not find release \"${version}\" for ${TOJI_REPO}.
+
+This usually means no releases have been published yet (public repo).
+
+As the maintainer, push a version tag:
+  git tag v0.1.1 && git push origin v0.1.1
+
+Then wait for the GitHub Actions 'Release' workflow to finish.
+
+See https://github.com/${TOJI_REPO}/releases"
+    fi
     if [[ -z "${TOJI_GITHUB_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" ]]; then
       die "Could not find release \"${version}\" for ${TOJI_REPO}.
 
