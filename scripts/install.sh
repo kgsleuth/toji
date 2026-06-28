@@ -162,7 +162,7 @@ tag = data.get("tag_name", "?")
 assets = data.get("assets") or []
 for a in assets:
     if a.get("name") == name:
-        print(a["id"])
+        print(a.get("browser_download_url", ""))
         sys.exit(0)
 names = ", ".join(sorted(a.get("name", "?") for a in assets))
 print(f"MISSING:{tag}:{names}", file=sys.stderr)
@@ -186,7 +186,7 @@ fetch_asset() {
   local dest="$2"
   local asset_label="${3:-release asset}"
   local url args=()
-  url="https://api.github.com/repos/${TOJI_REPO}/releases/assets/${asset_id}"
+  url="$asset_id"
   while IFS= read -r arg; do
     [[ -n "$arg" ]] && args+=("$arg")
   done < <(curl_auth_args)
