@@ -11,7 +11,7 @@ lazy val root = project
       "com.lihaoyi" %%% "upickle" % "4.0.2",
       "org.scalameta" %%% "munit" % "1.0.0" % Test,
     ),
-    Compile / mainClass := Some("io.toji.Main"),
+    Compile / mainClass := Some("io.toji.cli.Main"),
   )
 
 addCommandAlias("tojiLink", "nativeLink")
