@@ -40,11 +40,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libidn2-dev
 
       - name: Test and link native binary
-        working-directory: native
+        working-directory: .
         run: sbt "test; nativeLink"
 
       - name: Smoke test
-        working-directory: native
+        working-directory: .
         run: |
           ./target/scala-3.4.0/toji --version
 
@@ -52,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
-          path: native/target/scala-3.4.0/toji
+          path: target/scala-3.4.0/toji
           if-no-files-found: error
 
   install-script:

@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "updated": "2026-06-28",
+  "tools": [
+    {
+      "name": "toji",
+      "repo": "kgsleuth/toji",
+      "description": "The gap-filling cursed tool installer (this binary).",
+      "aliases": [],
+      "binaryBase": ""
+    },
+    {
+      "name": "curtain",
+      "repo": "kgsleuth/curtain",
+      "description": "Security curtains: pre-commit + GitHub Actions for secret scanning & private-by-default.",
+      "aliases": [],
+      "binaryBase": ""
+    },
+    {
+      "name": "shikigami",
+      "repo": "kgsleuth/shikigami",
+      "description": "Observe industry, spec projects, RAG + suggestions for adapting capabilities.",
+      "aliases": [],
+      "binaryBase": ""
+    },
+    {
+      "name": "sleuthctl",
+      "repo": "kgsleuth/sleuthctl",
+      "description": "Microsoft Sentinel / Defender XDR incident response knowledge and tooling.",
+      "aliases": [],
+      "binaryBase": ""
+    },
+    {
+      "name": "kenjaku",
+      "repo": "kgsleuth/kenjaku",
+      "description": "Local planning CLI for to-dos/ queues, plan shards, dependency gating, and live MASTER-TODO.md.",
+      "aliases": [],
+      "binaryBase": ""
+    },
+    {
+      "name": "yuta",
+      "repo": "kgsleuth/yuta",
+      "description": "Yuta — skill copy & technique harvester for the agent skills catalog.",
+      "aliases": [],
+      "binaryBase": ""
+    },
+    {
+      "name": "dhruv",
+      "repo": "kgsleuth/dhruv",
+      "description": "Perfect-recall RAG library — Scala Native keyword search, RRF, JSONL persistence.",
+      "aliases": [],
+      "binaryBase": ""
+    },
+    {
+      "name": "rika",
+      "repo": "kgsleuth/rika",
+      "description": "Web-to-clean-Markdown scraper/crawler; fetch layer for yuta harvest and web-to-skill.",
+      "aliases": [],
+      "binaryBase": ""
+    }
+  ]
+}

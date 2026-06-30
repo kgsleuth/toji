@@ -1,4 +1,4 @@
-package io.toji
+package io.toji.cli
 
 case class GlobalOpts(
   json: Boolean = false,

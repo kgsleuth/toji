@@ -1,4 +1,4 @@
-package io.toji
+package io.toji.cli
 
 object Output:
   def emitText(s: String): Unit = println(s)

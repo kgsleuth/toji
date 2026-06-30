@@ -1,4 +1,4 @@
-package io.toji
+package io.toji.cli
 
 class TojiError(val message: String, val exitCode: Int = 6) extends Exception(message)
 

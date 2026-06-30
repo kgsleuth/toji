@@ -1,4 +1,5 @@
-package io.toji
+package io.toji.cli
+import io.toji.infrastructure._
 
 import java.nio.file.Paths
 import scala.sys.process.*
@@ -9,7 +10,9 @@ object Main:
 
   def main(args: Array[String]): Unit =
     val code =
-      try parseAndRun(args.toList)
+      try
+        if !isMutatingCommand(args.toList) then Installer.maybeAutoUpdate()
+        parseAndRun(args.toList)
       catch
         case e: ValidationError =>
           System.err.println(s"error: ${e.message}")
@@ -32,22 +35,29 @@ object Main:
         println(s"toji $Version")
         Exit.Ok
       case "--update" :: rest =>
-        Installer.selfUpdate(force = hasFlag(rest, "--force"))
+        Installer.selfUpdate(force = hasFlag(rest, "--force"), ignoreInterval = true)
         Exit.Ok
       case "update" :: rest =>
         val force = hasFlag(rest, "--force")
-        val target = rest.find(a => !a.startsWith("-")).getOrElse("toji")
-        if target == "toji" || target == "self" then
-          Installer.selfUpdate(force)
+        if hasFlag(rest, "--all") then
+          Installer.updateAll(force, dueOnly = hasFlag(rest, "--due-only"))
         else
-          Installer.install(target, "latest", force)
+          val target = rest.find(a => !a.startsWith("-")).getOrElse("toji")
+          if target == "toji" || target == "self" then
+            Installer.selfUpdate(force, ignoreInterval = true)
+          else
+            Installer.install(target, "latest", force, ignoreInterval = true)
         Exit.Ok
       case "install" :: rest =>
         handleInstall(rest)
+      case "available" :: _ =>
+        handleAvailable()
       case "search" :: q =>
         handleSearch(q.mkString(" "))
-      case "list" :: _ | "tools" :: _ =>
-        handleList()
+      case "list" :: rest =>
+        if hasFlag(rest, "--available") then handleAvailable() else handleList()
+      case "tools" :: rest =>
+        if hasFlag(rest, "--available") then handleAvailable() else handleList()
       case "auth" :: _ =>
         println(s"GitHub auth: ${Auth.describe}")
         if Auth.current == Auth.None then
@@ -56,13 +66,37 @@ object Main:
         Exit.Ok
       case "which" :: tool :: _ =>
         handleWhich(tool)
+      case "registry" :: "refresh" :: _ =>
+        ToolRegistry.refresh()
+        println(s"Registry refreshed (${ToolRegistry.all.size} tools).")
+        Exit.Ok
+      case "registry" :: "scan" :: rest =>
+        val org = rest.find(!_.startsWith("-")).getOrElse(Catalog.defaultOrg)
+        val merged = Catalog.scanAndMergeRegistry(org)
+        println(s"Registry scan ($org): ${merged.size} tools in cache.")
+        println("Run: toji available")
+        Exit.Ok
+      case "registry" :: "show" :: _ =>
+        println(ToolRegistry.registryJson())
+        Exit.Ok
+      case "registry" :: _ =>
+        println("Usage: toji registry refresh|scan [org]|show")
+        Exit.Usage
       case _ =>
         printHelp()
         Exit.Usage
 
   private def hasFlag(args: List[String], f: String): Boolean = args.contains(f)
 
+  private def isMutatingCommand(args: List[String]): Boolean =
+    args match
+      case Nil => false
+      case ("install" | "update" | "--update") :: _ => true
+      case _ => false
+
   private def handleInstall(rest: List[String]): Int =
+    if hasFlag(rest, "--all") then
+      return Installer.installAll(hasFlag(rest, "--force"))
     // install <name|owner/repo> [version] [--force] [--dir /path]
     var target: Option[String] = None
     var ver = "latest"
@@ -106,13 +140,29 @@ object Main:
       Exit.Ok
 
   private def handleList(): Int =
-    println("Known tools (add more in ToolRegistry.scala or install by owner/repo directly):")
+    println("Registry tools (names only — use 'toji available' to probe GitHub releases):")
     ToolRegistry.all.foreach { t =>
       val als = if t.aliases.nonEmpty then s" [${t.aliases.mkString(", ")}]" else ""
       println(s"  ${t.name}$als  →  ${t.repo}")
     }
     println("\nAlso works for any repo you have access to:")
     println("  toji install kgsleuth/some-private-cli")
+    println("\nRegistry: toji registry refresh | scan | show")
+    println("Releases: toji available")
+    Exit.Ok
+
+  private def handleAvailable(): Int =
+    if Auth.current == Auth.None then
+      println("GitHub auth: none — some private repos may show as inaccessible.")
+      println("Run: gh auth login\n")
+    val platformHint = Platform.describeCurrentPlatform()
+    val entries = Catalog.listAvailable()
+    val installable = entries.count(e => e.status == Catalog.Status.Available)
+    println(s"Tools with release assets matching $platformHint ($installable installable):\n")
+    println(f"  ${"NAME"}%-14s${"RELEASE"}%-11s${"STATUS"}%-22sREPO")
+    entries.foreach(e => println(Catalog.formatEntryLine(e)))
+    println("\nInstall:  toji install <name>  |  toji install --all")
+    println("Update:   toji update --all")
     Exit.Ok
 
   private def handleWhich(tool: String): Int =
@@ -135,13 +185,17 @@ from repos you have access to — no secret sharing required.
 
 Usage:
   toji --version
-  toji --update [--force]              # self-update this tool
-  toji update [tool] [--force]         # update a tool (or 'toji')
+  toji update [tool|--all] [--force]   # update one tool or all toji-managed installs
+  toji --update [--force]              # self-update (always checks GitHub; --force reinstalls same version)
 
   toji install <name|owner/repo> [vX.Y] [--force] [--dir DIR]
+  toji install --all [--force]         # install every available registry tool
+  toji available                       # list registry tools + release status
+  toji list [--available]              # registry names, or probe GitHub
   toji search <query>
-  toji list
-  toji tools
+  toji registry refresh                # pull registry.json from toji repo
+  toji registry scan [org]             # discover org repos with releases → local cache
+  toji registry show                   # print cached registry JSON
 
   toji auth                            # show current gh / token status
   toji which <tool>
@@ -152,6 +206,13 @@ Examples:
   toji install owner/private-tool --force
   toji search cli
   toji update shikigami
+  toji update --all                    # refresh every tool toji has installed
+
+Auto-updates:
+  Any routine toji command (list, search, auth, …) may background-check installed
+  tools older than TOJI_UPDATE_INTERVAL_DAYS (default 7). Or schedule:
+
+  0 9 * * 0 toji update --all
 
 Auth (private repos):
   Preferred: gh auth login
@@ -167,4 +228,6 @@ Environment:
 
 Install (first time, public releases):
   curl -fsSL https://raw.githubusercontent.com/kgsleuth/toji/main/scripts/install.sh | bash
+
+The registry of friendly tool names lives in registry.json in this repo and is fetched dynamically.
 """)

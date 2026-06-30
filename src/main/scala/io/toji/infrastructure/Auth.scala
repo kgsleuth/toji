@@ -1,4 +1,5 @@
-package io.toji
+package io.toji.infrastructure
+import io.toji.cli._
 
 import scala.sys.process.*
 import scala.util.Try
@@ -21,17 +22,42 @@ object Auth:
     else tokenFromEnv.map(Token.apply).getOrElse(None)
 
   def ghAvailableAndAuthed: Boolean =
-    Try {
-      // Use --silent + capture to avoid printing the pretty table
-      val status = Process(Seq("gh", "auth", "status", "-h", "github.com")).!(ProcessLogger(_ => (), _ => ()))
+    ghBin.isDefined && Try {
+      val gh = ghBin.get
+      val status = Process(Seq(gh, "auth", "status", "-h", "github.com")).!(ProcessLogger(_ => (), _ => ()))
       if status == 0 then true
-      else
-        // fallback: lightweight authed call, silence output
-        Process(Seq("gh", "api", "user", "--silent")).!(ProcessLogger(_ => (), _ => ())) == 0
+      else Process(Seq(gh, "api", "user", "--silent")).!(ProcessLogger(_ => (), _ => ())) == 0
     }.getOrElse(false)
 
-  def hasGh: Boolean =
-    Try(Process(Seq("sh", "-c", "command -v gh >/dev/null 2>&1")).! == 0).getOrElse(false)
+  def hasGh: Boolean = ghBin.isDefined
+
+  /** Absolute path to gh when on PATH (Scala Native may not inherit a full shell PATH). */
+  def ghBin: Option[String] =
+    Try {
+      val out = new StringBuilder
+      val code = Process(Seq("sh", "-c", "command -v gh")).!(ProcessLogger(out.append(_), _ => ()))
+      if code == 0 then Option(out.toString.trim).filter(_.nonEmpty) else scala.None
+    }.getOrElse(scala.None)
+
+  /** Run gh with captured stdout when the local gh session is active. */
+  def runGh(args: Seq[String]): Option[String] =
+    if current != GhCli then scala.None
+    else
+      ghBin.flatMap { gh =>
+        Try {
+          val out = new StringBuilder
+          val code = Process(Seq(gh) ++ args).!(ProcessLogger(out.append(_), _ => ()))
+          if code == 0 then Some(out.toString.trim).filter(_.nonEmpty) else scala.None
+        }.getOrElse(scala.None)
+      }
+
+  /** Run gh and return whether it exited 0. */
+  def runGhQuiet(args: Seq[String]): Boolean =
+    if current != GhCli then false
+    else
+      ghBin.exists { gh =>
+        Try(Process(Seq(gh) ++ args).!(ProcessLogger(_ => (), _ => ())) == 0).getOrElse(false)
+      }
 
   private def tokenFromEnv: Option[String] =
     // Prefer tool-specific, then common GH names
@@ -45,7 +71,9 @@ object Auth:
   def getToken: Option[String] =
     current match
       case GhCli =>
-        Try(Process(Seq("gh", "auth", "token")).!!).toOption.map(_.trim).filter(_.nonEmpty)
+        ghBin.flatMap { gh =>
+          Try(Process(Seq(gh, "auth", "token")).!!).toOption.map(_.trim).filter(_.nonEmpty)
+        }
       case Token(t) => Some(t)
       case Auth.None => scala.None
 
@@ -58,23 +86,17 @@ object Auth:
     current match
       case GhCli      => "gh (local session)"
       case Token(_)   => "PAT from env"
-      case None       => "none (public only)"
-
-  /** Run a gh command if gh auth available, else None. */
-  def runGh(args: Seq[String]): Option[String] =
-    if current == GhCli then
-      Try(Process(Seq("gh") ++ args).!!).toOption.map(_.trim)
-    else scala.None
+      case Auth.None => "none (public only)"
 
   /** Convenience: fetch json via gh api or curl+token. */
   def apiGet(path: String): String =
     current match
       case GhCli =>
-        Process(Seq("gh", "api", path)).!!
+        ghBin.fold(throw ValidationError("gh is not on PATH"))(gh => Process(Seq(gh, "api", path)).!!)
       case Token(t) =>
         val url = if path.startsWith("http") then path else s"https://api.github.com$path"
         val cmd = Seq("curl", "-fsSL") ++ curlAuthArgs ++ Seq(url)
         Process(cmd).!!
-      case None =>
+      case Auth.None =>
         val url = if path.startsWith("http") then path else s"https://api.github.com$path"
         Process(Seq("curl", "-fsSL", url)).!!

@@ -1,4 +1,5 @@
-package io.toji
+package io.toji.infrastructure
+import io.toji.cli._
 
 import scala.sys.process.*
 
@@ -27,5 +28,12 @@ Supported:
 See toji --help"""
         )
     AssetName(asset)
+
+  def assetSuffix(tool: String): String =
+    detectAsset(tool).value.stripPrefix(s"${tool.toLowerCase.replaceAll("[^a-z0-9-]", "-")}")
+
+  def describeCurrentPlatform(): String =
+    val sample = detectAsset("toji").value
+    sample.replaceFirst("toji", "<name>")
 
   private def runOut(args: String*): String = Process(args.toSeq).!!.trim

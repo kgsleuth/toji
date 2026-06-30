@@ -1,4 +1,5 @@
-package io.toji
+package io.toji.infrastructure
+import io.toji.cli._
 
 import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import scala.sys.process.*
@@ -21,14 +22,16 @@ object Installer:
     nameOrRepo: String,
     version: String = "latest",
     force: Boolean = false,
-    destDirOverride: Option[Path] = None
+    destDirOverride: Option[Path] = None,
+    ignoreInterval: Boolean = false
   ): InstallResult =
     val repo = ToolRegistry.defaultRepoFor(nameOrRepo)
     val base = ToolRegistry.baseFor(nameOrRepo)
     val asset = Platform.detectAsset(base)
     val tag = normalizeVersion(version)
 
-    if version == "latest" && !force then
+    // Throttle only background/cron-style checks. Explicit `toji update` passes ignoreInterval=true.
+    if version == "latest" && !force && !ignoreInterval then
       readState(base) match
         case Some(st) if !isDue(st.lastCheckedAtMillis, System.currentTimeMillis(), intervalDaysFromEnv()) =>
           val next = st.lastCheckedAtMillis + intervalDaysFromEnv().toLong * MillisPerDay
@@ -47,13 +50,17 @@ object Installer:
     Files.createDirectories(dest.getParent)
     val tmp = Files.createTempFile(s"toji-install-$base-", ".tmp")
     try
-      GitHubRelease.download(repo, assetMeta, tmp)
+      GitHubRelease.download(repo, release, assetMeta, tmp)
       chmodExecutable(tmp)
       val newVer = smokeVersion(tmp, base)
       val checked = System.currentTimeMillis()
+      val stateVer = readState(base).map(_.version).getOrElse("")
+      val installedVer = if Files.isRegularFile(dest) then Some(smokeVersion(dest, base)) else None
+      val alreadyCurrent =
+        sameVersion(newVer, stateVer) ||
+        installedVer.exists(v => sameVersion(newVer, v))
 
-      val isNewer = !sameVersion(newVer, readState(base).map(_.version).getOrElse(""))
-      if !isNewer && !force then
+      if alreadyCurrent && !force then
         writeState(base, checked, newVer)
         info(s"$base already up to date ($newVer)")
         InstallResult(base, newVer, dest, wasUpdate = false)
@@ -65,8 +72,8 @@ object Installer:
     finally
       Files.deleteIfExists(tmp)
 
-  def selfUpdate(force: Boolean = false): InstallResult =
-    install("toji", "latest", force)
+  def selfUpdate(force: Boolean = false, ignoreInterval: Boolean = false): InstallResult =
+    install("toji", "latest", force, ignoreInterval = ignoreInterval)
 
   // --- state per tool (millis) ---
 
@@ -88,7 +95,11 @@ object Installer:
     else
       Try {
         val j = ujson.read(Files.readString(p))
-        val millis = j.obj.get("last_checked_millis").map(_.num.toLong).getOrElse(System.currentTimeMillis())
+        val millis =
+          j.obj.get("last_checked_millis") match
+            case Some(v) if v.value.isInstanceOf[java.lang.Number] => v.num.toLong
+            case Some(v) => v.str.trim.toLongOption.getOrElse(System.currentTimeMillis())
+            case None    => System.currentTimeMillis()
         ToolState(millis, j("version").str)
       }.toOption
 
@@ -141,7 +152,7 @@ object Installer:
     normalizeVersionLabel(a) == normalizeVersionLabel(b)
 
   private def normalizeVersionLabel(raw: String): String =
-    raw.stripPrefix("toji ").stripPrefix("curtain ").stripPrefix("shikigami ").takeWhile(c => c != ' ' && c != '(').trim.toLowerCase
+    raw.stripPrefix("toji ").stripPrefix("curtain ").stripPrefix("shikigami ").stripPrefix("yuta ").stripPrefix("kenjaku ").stripPrefix("dhruv ").takeWhile(c => c != ' ' && c != '(').trim.toLowerCase
 
   private def info(msg: String): Unit = println(s"toji: $msg")
 
@@ -152,3 +163,71 @@ object Installer:
   private def formatWhen(futureMillis: Long): String =
     val d = (futureMillis - System.currentTimeMillis()) / MillisPerDay
     if d <= 0 then "now" else if d == 1 then "in 1 day" else s"in $d days"
+
+  // Tool base names tracked under TOJI_STATE_DIR (one .json per tool; excludes registry).
+  def installedTools(): List[String] =
+    val dir = stateDir()
+    if !Files.isDirectory(dir) then Nil
+    else
+      import scala.jdk.CollectionConverters.*
+      Files.list(dir).iterator().asScala.toList
+        .filter(p => Files.isRegularFile(p) && p.getFileName.toString.endsWith(".json"))
+        .map(_.getFileName.toString.stripSuffix(".json"))
+        .filter(_ != "registry")
+        .sorted
+
+  def toolsDueForCheck(): List[String] =
+    val now = System.currentTimeMillis()
+    val days = intervalDaysFromEnv()
+    installedTools().filter { base =>
+      readState(base) match
+        case None     => true
+        case Some(st) => isDue(st.lastCheckedAtMillis, now, days)
+    }
+
+  def updateAll(force: Boolean = false, dueOnly: Boolean = false): Int =
+    val tools =
+      if dueOnly && !force then toolsDueForCheck()
+      else installedTools()
+    if tools.isEmpty then
+      if dueOnly then Exit.Ok
+      else
+        info("no toji-managed tools found (install with: toji install <name>)")
+        Exit.Ok
+    else
+      var failures = 0
+      tools.foreach { base =>
+        try
+          if base == "toji" then selfUpdate(force, ignoreInterval = !dueOnly || force)
+          else install(base, "latest", force, ignoreInterval = !dueOnly || force)
+        catch
+          case e: ValidationError =>
+            System.err.println(s"error: ${e.message}")
+            failures += 1
+      }
+      if failures > 0 then Exit.Validation else Exit.Ok
+
+  def maybeAutoUpdate(): Unit =
+    try
+      if toolsDueForCheck().nonEmpty then
+        Process(Seq("sh", "-c", "toji update --all --due-only >/dev/null 2>&1 &")).run()
+    catch
+      case _: Exception => ()
+
+  /** Install every registry tool that has a release asset for this platform. */
+  def installAll(force: Boolean = false): Int =
+    val targets =
+      Catalog.listAvailable().filter(e => e.status == Catalog.Status.Available || (force && e.canInstall))
+    if targets.isEmpty then
+      info("nothing to install (run: toji available)")
+      Exit.Ok
+    else
+      var failures = 0
+      targets.foreach { e =>
+        try install(e.tool.name, "latest", force, ignoreInterval = true)
+        catch
+          case err: ValidationError =>
+            System.err.println(s"error: ${err.message}")
+            failures += 1
+      }
+      if failures > 0 then Exit.Validation else Exit.Ok
